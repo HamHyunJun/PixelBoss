@@ -1,0 +1,56 @@
+{
+  "$comment": "VoxelHQ 대상 프로젝트 설정 템플릿. path 는 로컬 절대 경로를 권장합니다(상대 경로는 이 파일 기준). 개인 경로는 config/projects.local.json 에 복사해 쓰면 git 에 올라가지 않습니다.",
+  "runner": {
+    "mode": "mock",
+    "maxParallel": 6,
+    "claudeBin": "claude",
+    "claudeArgs": ["--permission-mode", "acceptEdits"],
+    "timeoutSec": 900
+  },
+  "scan": {
+    "intervalSec": 300,
+    "runChecks": true,
+    "checkTimeoutSec": 120
+  },
+  "projects": [
+    {
+      "id": "shop-web",
+      "name": "Shop Web",
+      "path": "../fixtures/shop-web",
+      "github": { "owner": "your-org", "repo": "shop-web", "baseBranch": "main" },
+      "checks": { "typecheck": "node check.mjs types", "lint": "node check.mjs lint" }
+    },
+    {
+      "id": "admin-api",
+      "name": "Admin API",
+      "path": "../fixtures/admin-api",
+      "github": { "owner": "your-org", "repo": "admin-api" },
+      "checks": { "typecheck": "node check.mjs types", "test": "node check.mjs test" }
+    },
+    {
+      "id": "mobile-app",
+      "name": "Mobile App",
+      "path": "../fixtures/mobile-app",
+      "checks": { "lint": "node check.mjs lint" }
+    },
+    {
+      "id": "data-pipeline",
+      "name": "Data Pipeline",
+      "path": "../fixtures/data-pipeline",
+      "checks": { "build": "node check.mjs build" }
+    },
+    {
+      "id": "design-system",
+      "name": "Design System",
+      "path": "../fixtures/design-system",
+      "github": { "owner": "your-org", "repo": "design-system" },
+      "checks": { "typecheck": "node check.mjs types", "lint": "node check.mjs lint" }
+    },
+    {
+      "id": "landing-page",
+      "name": "Landing Page",
+      "path": "../fixtures/landing-page",
+      "checks": { "lint": "node check.mjs lint" }
+    }
+  ]
+}
