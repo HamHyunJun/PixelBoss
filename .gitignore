@@ -7,3 +7,4 @@ fixtures/
 *.log
 .env
 config/projects.local.json
+.omc/
