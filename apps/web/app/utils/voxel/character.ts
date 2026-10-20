@@ -4,7 +4,7 @@ import { box, boxGeo, textSprite } from './world'
 import { routeBetween, type Spot, type Vec2 } from './layout'
 
 export type IconKind = 'working' | 'alert' | 'done' | 'waiting' | 'queued' | 'meeting' | null
-export type Pose = 'typing' | 'stand' | 'walk' | 'talk' | 'post'
+export type Pose = 'typing' | 'stand' | 'walk' | 'talk' | 'post' | 'sittalk' | 'sit' | 'drink' | 'use'
 
 const SKIN = ['#f1c27d', '#e0ac69', '#c68642', '#ffdbac', '#8d5524']
 const HAIR = ['#2b1d0e', '#4a3222', '#1c1c1c', '#7a4a1e', '#b5651d']
@@ -69,6 +69,8 @@ export class Character {
   private armL = new THREE.Group()
   private armR = new THREE.Group()
   private head: THREE.Mesh
+  /** 쉬는 중에 오른손에 드는 컵 */
+  private cup: THREE.Mesh
   private iconSlot = new THREE.Group()
   private icons = buildIcons()
   private materials: THREE.MeshLambertMaterial[] = []
@@ -89,7 +91,11 @@ export class Character {
     readonly agentId: string,
     color: string,
     readonly leader: boolean,
+    /** 사장: 금색 왕관과 정장 차림, 팀장보다 조금 크다 */
+    readonly boss = false,
   ) {
+    // 팀장은 소집 때 멀리까지 걸어야 해서 조금 빠르다
+    if (leader) this.speed = 9
     const skin = SKIN[Math.floor(rand() * SKIN.length)]!
     const hair = HAIR[Math.floor(rand() * HAIR.length)]!
     const mk = (w: number, h: number, d: number, c: string, x = 0, y = 0, z = 0) => {
@@ -98,7 +104,7 @@ export class Character {
       m.userData.agentId = agentId
       return m
     }
-    const scale = leader ? 1.12 : 1
+    const scale = boss ? 1.25 : leader ? 1.12 : 1
     // 다리 (엉덩이 관절 기준)
     for (const [leg, x] of [
       [this.legL, -0.2],
@@ -112,7 +118,11 @@ export class Character {
     // 몸통
     this.body.add(mk(0.8, 0.85, 0.48, color, 0, 0.75, 0))
     if (leader) {
-      this.body.add(mk(0.16, 0.6, 0.05, '#c0392b', 0, 0.95, 0.25)) // 넥타이
+      this.body.add(mk(0.16, 0.6, 0.05, boss ? '#f2c744' : '#c0392b', 0, 0.95, 0.25)) // 넥타이
+    }
+    if (boss) {
+      this.body.add(mk(0.5, 0.5, 0.06, '#f5f1e6', 0, 1.0, 0.25)) // 셔츠 칼라
+      this.body.add(mk(0.16, 0.6, 0.06, '#f2c744', 0, 0.95, 0.27))
     }
     // 팔 (어깨 관절 기준)
     for (const [arm, x] of [
@@ -123,6 +133,11 @@ export class Character {
       arm.add(mk(0.24, 0.78, 0.3, color, 0, -0.78, 0))
       arm.add(mk(0.22, 0.16, 0.26, skin, 0, -0.92, 0))
       this.body.add(arm)
+      if (arm === this.armR) {
+        this.cup = mk(0.16, 0.2, 0.16, '#f5f1e6', 0, -1.12, 0.22)
+        this.cup.visible = false
+        arm.add(this.cup)
+      }
     }
     // 머리
     this.head = mk(0.7, 0.7, 0.7, skin, 0, 1.6, 0)
@@ -132,7 +147,11 @@ export class Character {
     // 눈
     this.body.add(mk(0.1, 0.1, 0.02, '#1b1b1b', -0.16, 1.98, 0.36))
     this.body.add(mk(0.1, 0.1, 0.02, '#1b1b1b', 0.16, 1.98, 0.36))
-    if (leader) {
+    if (boss) {
+      // 사장 표식: 금색 왕관
+      this.body.add(mk(0.78, 0.16, 0.78, '#f2c744', 0, 2.38, 0))
+      for (const [x, z] of [[-0.3, -0.3], [0.3, -0.3], [-0.3, 0.3], [0.3, 0.3], [0, 0]] as const) this.body.add(mk(0.16, 0.26, 0.16, '#f2c744', x, 2.54, z))
+    } else if (leader) {
       // 팀장 표식: 금색 헤드셋
       this.body.add(mk(0.82, 0.08, 0.16, '#f5c542', 0, 2.42, 0))
       this.body.add(mk(0.1, 0.3, 0.2, '#f5c542', -0.4, 1.95, 0))
@@ -140,7 +159,7 @@ export class Character {
     this.body.scale.setScalar(scale)
     this.group.add(this.body)
 
-    this.iconSlot.position.y = leader ? 3.35 : 3.05
+    this.iconSlot.position.y = boss ? 3.9 : leader ? 3.35 : 3.05
     for (const o of Object.values(this.icons)) this.iconSlot.add(o)
     this.group.add(this.iconSlot)
     this.group.userData.agentId = agentId
@@ -244,6 +263,29 @@ export class Character {
         headTilt = Math.sin(tt * 1.3) * 0.05
         break
       }
+      case 'use':
+        // 서서 기계(커피머신·자판기·냉장고)를 조작
+        armL = -1.0 + Math.sin(tt * 4) * 0.08
+        armR = -1.1 + Math.sin(tt * 5 + 1) * 0.1
+        headTilt = 0.08
+        break
+      case 'drink':
+        // 서서 컵을 들고 가끔 입으로 가져간다
+        armR = -1.2 - Math.max(0, Math.sin(tt * 1.1)) * 0.7
+        headTilt = Math.sin(tt * 0.8) * 0.05
+        break
+      case 'sit':
+        // 앉아서 쉬기: 컵을 들고 가끔 마시며 주위를 둘러본다
+        bodyY = 0.12
+        armR = -1.0 - Math.max(0, Math.sin(tt * 0.9)) * 0.8
+        headTilt = Math.sin(tt * 0.6) * 0.08
+        break
+      case 'sittalk':
+        // 앉아서 대화
+        bodyY = 0.12
+        armR = -1.2 + Math.sin(tt * 6) * 0.3
+        headTilt = Math.sin(tt * 3) * 0.08
+        break
       case 'talk':
         armR = -1.6 + Math.sin(tt * 6) * 0.35
         headTilt = Math.sin(tt * 3) * 0.08
@@ -255,7 +297,8 @@ export class Character {
       default:
         headTilt = Math.sin(tt * 0.8) * 0.04
     }
-    const sitting = this.pose === 'typing'
+    const sitting = this.pose === 'typing' || this.pose === 'sittalk' || this.pose === 'sit'
+    this.cup.visible = this.pose === 'drink' || this.pose === 'sit' || this.pose === 'use'
     this.legL.rotation.x = sitting ? -Math.PI / 2 : legSwing
     this.legR.rotation.x = sitting ? -Math.PI / 2 : -legSwing
     this.armL.rotation.x = armL

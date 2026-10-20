@@ -1,10 +1,12 @@
 <script setup lang="ts">
 // 팀장 모달: 부서 통합 브리핑 대시보드 (소속 6개 프로젝트 상태 한눈에 보기)
-import { DEPARTMENTS, workerId } from '@voxelhq/shared'
+import { DEPARTMENTS, workerId } from '@pixelboss/shared'
+import type { DepartmentId } from '@pixelboss/shared'
 
 const props = defineProps<{ agentId: string }>()
 const emit = defineEmits<{ close: []; openWorker: [agentId: string] }>()
 const { state } = useHQ()
+const targets = useState<DepartmentId[]>('command-targets', () => [])
 
 const leader = computed(() => state.agents[props.agentId]!)
 const dept = computed(() => DEPARTMENTS.find((d) => d.id === leader.value.department)!)
@@ -19,6 +21,11 @@ const rows = computed(() =>
     return { p, id, agent, delta, task, report }
   }),
 )
+
+const callDept = (): void => {
+  targets.value = [dept.value.id]
+  emit('close')
+}
 
 const stats = computed(() => {
   const r = rows.value
@@ -36,6 +43,7 @@ const stats = computed(() => {
 <template>
   <BaseModal :title="`${dept.name} · 부서 통합 브리핑`" :subtitle="dept.mission" wide @close="emit('close')">
     <template #actions>
+      <button :disabled="state.phase !== 'idle'" @click="callDept()">📣 이 부서 호출</button>
       <StatusBadge :status="leader.status" />
     </template>
 

@@ -4,12 +4,19 @@ import type {
   ApprovalCard,
   ClientMessage,
   CommandPlan,
+  DepartmentId,
+  FsListing,
   HQSnapshot,
+  HistoryItem,
+  IssueInfo,
+  PipelineInfo,
   OrchestratorPhase,
   ProjectConfig,
   ProjectDelta,
+  ScheduleConfig,
+  ScheduleInfo,
   ServerMessage,
-} from '@voxelhq/shared'
+} from '@pixelboss/shared'
 
 export interface Toast {
   id: number
@@ -26,6 +33,14 @@ interface HQState {
   plan: CommandPlan | null
   approval: ApprovalCard | null
   runnerMode: string
+  schedules: ScheduleInfo[]
+  pipelines: PipelineInfo[]
+  issues: IssueInfo[]
+  keepAwake: boolean
+  history: HistoryItem[]
+  historyDoc?: { id: string; markdown: string }
+  /** 폴더 탐색기 최근 응답 */
+  fs?: FsListing
   toasts: Toast[]
 }
 
@@ -40,6 +55,11 @@ const state = reactive<HQState>({
   plan: null,
   approval: null,
   runnerMode: '',
+  schedules: [],
+  pipelines: [],
+  issues: [],
+  keepAwake: false,
+  history: [],
   toasts: [],
 })
 
@@ -72,6 +92,10 @@ function applySnapshot(s: HQSnapshot) {
   state.plan = s.plan
   state.approval = s.approval
   state.runnerMode = s.runnerMode
+  state.schedules = s.schedules
+  state.pipelines = s.pipelines
+  state.issues = s.issues
+  state.keepAwake = s.keepAwake
 }
 
 function handle(msg: ServerMessage) {
@@ -96,6 +120,27 @@ function handle(msg: ServerMessage) {
       break
     case 'toast':
       pushToast(msg.level, msg.message)
+      break
+    case 'fs:list':
+      state.fs = msg.listing
+      break
+    case 'pipeline': {
+      const i = state.pipelines.findIndex((p) => p.id === msg.pipeline.id)
+      if (i >= 0) state.pipelines[i] = msg.pipeline
+      else state.pipelines.push(msg.pipeline)
+      break
+    }
+    case 'issue': {
+      const i = state.issues.findIndex((x) => x.id === msg.issue.id)
+      if (i >= 0) state.issues[i] = msg.issue
+      else state.issues.push(msg.issue)
+      break
+    }
+    case 'history:list':
+      state.history = msg.items
+      break
+    case 'history:doc':
+      state.historyDoc = { id: msg.id, markdown: msg.markdown }
       break
     case 'pty:history':
     case 'pty:data':
@@ -129,9 +174,22 @@ export function useHQ() {
   }
   return {
     state: readonly(state) as HQState,
-    command: (text: string) => send({ type: 'command', text }),
+    command: (text: string, departments?: DepartmentId[]) => send({ type: 'command', text, departments }),
     scan: () => send({ type: 'scan' }),
-    decide: (commandId: string, approve: boolean) => send({ type: 'approval:decide', commandId, approve }),
+    decide: (commandId: string, decisions: Record<string, boolean>) => send({ type: 'approval:decide', commandId, decisions }),
+    listDir: (path?: string) => send({ type: 'fs:list', path }),
+    addProject: (path: string, name?: string) => send({ type: 'project:add', path, name }),
+    decidePipeline: (id: string, approve: boolean) => send({ type: 'pipeline:decide', id, approve }),
+    stopPipeline: (id: string) => send({ type: 'pipeline:stop', id }),
+    ackIssue: (id: string, acknowledged: boolean) => send({ type: 'issue:ack', id, acknowledged }),
+    listHistory: () => send({ type: 'history:list' }),
+    readHistory: (id: string) => send({ type: 'history:read', id }),
+    saveSchedule: (schedule: Omit<ScheduleConfig, 'id'> & { id?: string }) => send({ type: 'schedule:save', schedule }),
+    removeSchedule: (id: string) => send({ type: 'schedule:remove', id }),
+    runSchedule: (id: string) => send({ type: 'schedule:run', id }),
+    setRunner: (mode: 'mock' | 'claude') => send({ type: 'runner:set', mode }),
+    removeProject: (projectId: string) => send({ type: 'project:remove', projectId }),
+    openSession: (agentId: string) => send({ type: 'pty:open', agentId }),
     input: (agentId: string, data: string) => send({ type: 'pty:input', agentId, data }),
     resize: (agentId: string, cols: number, rows: number) => send({ type: 'pty:resize', agentId, cols, rows }),
     /** 터미널 스트림 구독. 반환된 함수로 해제 */

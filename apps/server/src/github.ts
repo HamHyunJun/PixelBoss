@@ -1,6 +1,6 @@
 // Octokit 연동 (선택). GITHUB_TOKEN 이 없으면 모든 함수가 조용히 건너뛴다.
 import { Octokit } from 'octokit'
-import type { ProjectConfig } from '@voxelhq/shared'
+import type { ProjectConfig } from '@pixelboss/shared'
 
 let client: Octokit | null | undefined
 
@@ -24,10 +24,10 @@ export async function countOpenIssues(p: ProjectConfig): Promise<number | undefi
   }
 }
 
-/** 승인된 변경을 브랜치로 푸시한 뒤 PR 생성 (VOXELHQ_GITHUB_PR=1 일 때만) */
+/** 승인된 변경을 브랜치로 푸시한 뒤 PR 생성 (PIXELBOSS_GITHUB_PR=1 일 때만) */
 export async function openPullRequest(p: ProjectConfig, branch: string, title: string, body: string): Promise<string | undefined> {
   const gh = octokit()
-  if (!gh || !p.github || process.env.VOXELHQ_GITHUB_PR !== '1') return undefined
+  if (!gh || !p.github || process.env.PIXELBOSS_GITHUB_PR !== '1') return undefined
   const { data } = await gh.rest.pulls.create({
     owner: p.github.owner,
     repo: p.github.repo,

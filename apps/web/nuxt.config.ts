@@ -1,4 +1,4 @@
-// VoxelHQ 프론트엔드 설정
+// PixelBoss 프론트엔드 설정
 // Three.js / xterm.js 는 브라우저 전용이라 SPA 모드(ssr: false)로 동작한다.
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-01',
@@ -7,10 +7,11 @@ export default defineNuxtConfig({
   css: ['@xterm/xterm/css/xterm.css', '~/assets/styles/main.scss'],
   app: {
     head: {
-      title: 'VoxelHQ · AI Virtual Company',
+      title: 'PixelBoss · AI Virtual Company',
       htmlAttrs: { lang: 'ko' },
       meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1' }],
       link: [
+        { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' },
         { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css' },
       ],
     },

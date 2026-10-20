@@ -1,4 +1,6 @@
-# VoxelHQ (AI Virtual Company)
+<img src="docs/logo.svg" alt="PixelBoss 로고" width="96" />
+
+# PixelBoss (AI Virtual Company)
 
 로컬·GitHub 프로젝트 6개를 24시간 관리하는 **복셀 3D 가상 오피스 대시보드**입니다.
 사용자가 회의실에 팀장들을 소집해 상위 지시를 내리면, 팀장이 부서 실무진에게 태스크를 나누고
@@ -17,7 +19,7 @@ pnpm dev             # 백엔드(ws://127.0.0.1:4100) + 프론트엔드(http://l
 기본 실행기는 **mock** 이라 LLM 을 호출하지 않습니다. 실제 Claude Code 로 돌리려면:
 
 ```bash
-VOXELHQ_RUNNER=claude pnpm dev   # 또는 config/projects.json 의 runner.mode 를 "claude" 로
+PIXELBOSS_RUNNER=claude pnpm dev   # 또는 config/projects.json 의 runner.mode 를 "claude" 로
 ```
 
 `claude` CLI 가 설치·로그인되어 있어야 합니다. 각 세션은 `claude -p "<하위 프롬프트>" --permission-mode acceptEdits --output-format stream-json`
@@ -45,11 +47,11 @@ VOXELHQ_RUNNER=claude pnpm dev   # 또는 config/projects.json 의 runner.mode �
 
 | 환경 변수 | 설명 |
 | --- | --- |
-| `VOXELHQ_RUNNER` | `mock` / `claude` 실행기 전환 |
-| `VOXELHQ_CONFIG` | 설정 파일 경로 직접 지정 |
-| `VOXELHQ_PORT`, `VOXELHQ_HOST` | 백엔드 포트(기본 4100), 바인드 주소(기본 127.0.0.1) |
+| `PIXELBOSS_RUNNER` | `mock` / `claude` 실행기 전환 |
+| `PIXELBOSS_CONFIG` | 설정 파일 경로 직접 지정 |
+| `PIXELBOSS_PORT`, `PIXELBOSS_HOST` | 백엔드 포트(기본 4100), 바인드 주소(기본 127.0.0.1) |
 | `GITHUB_TOKEN` | 열린 이슈 수 조회 (정적 필터 보조 신호) |
-| `VOXELHQ_GITHUB_PR=1` | 승인 시 `voxelhq/<지시ID>` 브랜치 푸시 + PR 생성 |
+| `PIXELBOSS_GITHUB_PR=1` | 승인 시 `pixelboss/<지시ID>` 브랜치 푸시 + PR 생성 |
 
 ## 동작 방식
 

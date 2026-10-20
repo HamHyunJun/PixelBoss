@@ -17,7 +17,7 @@ importers:
 
   apps/server:
     dependencies:
-      '@voxelhq/shared':
+      '@pixelboss/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       node-pty:
@@ -45,7 +45,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@voxelhq/shared':
+      '@pixelboss/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@xterm/addon-fit':

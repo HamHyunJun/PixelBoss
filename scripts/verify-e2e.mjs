@@ -2,7 +2,7 @@
 // 통합 검증 스크립트 (백엔드 흐름)
 // 가상 프로젝트 6개 생성 → 서버 기동 → 정적 필터 확인 → 전체 소집 → PTY 병렬 실행 → 승인/반려 → 결과 확인
 // 사용법: pnpm verify            (서버를 직접 띄움, mock 실행기)
-//        VOXELHQ_URL=ws://127.0.0.1:4100/ws pnpm verify   (이미 떠 있는 pnpm dev 서버에 접속)
+//        PIXELBOSS_URL=ws://127.0.0.1:4100/ws pnpm verify   (이미 떠 있는 pnpm dev 서버에 접속)
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
@@ -18,15 +18,15 @@ const ok = (cond, label) => {
 }
 
 let server
-let url = process.env.VOXELHQ_URL
+let url = process.env.PIXELBOSS_URL
 if (!url) {
   execFileSync(process.execPath, [join(root, 'scripts/make-fixtures.mjs')], { stdio: 'inherit' })
   execFileSync('rm', ['-rf', join(root, '.data')])
   const port = 4199
   url = `ws://127.0.0.1:${port}/ws`
-  server = spawn('pnpm', ['--filter', '@voxelhq/server', 'start'], {
+  server = spawn('pnpm', ['--filter', '@pixelboss/server', 'start'], {
     cwd: root,
-    env: { ...process.env, VOXELHQ_PORT: String(port), VOXELHQ_FAST: '1', VOXELHQ_MOCK_SPEED: '4', VOXELHQ_RUNNER: process.env.VOXELHQ_RUNNER ?? 'mock' },
+    env: { ...process.env, PIXELBOSS_PORT: String(port), PIXELBOSS_FAST: '1', PIXELBOSS_MOCK_SPEED: '4', PIXELBOSS_RUNNER: process.env.PIXELBOSS_RUNNER ?? 'mock' },
     stdio: ['ignore', 'pipe', 'inherit'],
     detached: true,
   })
@@ -117,13 +117,17 @@ try {
   const shop = reports.find((r) => r.projectId === 'shop-web')
   ok(/alt=""/.test(shop?.diff ?? '') && /-\s+console\.log/.test(shop?.diff ?? ''), 'shop-web diff 에 타입·린트·alt 수정 포함')
 
+  // 결정 키(코드 변경=프로젝트 id, 기획 아이디어=아이디어 id) 전부에 같은 값을 보낸다
+  const decisionsFor = (approve) =>
+    Object.fromEntries([...new Set(state.approval.reports.filter((r) => r.files.length).map((r) => r.projectId)), ...state.approval.reports.flatMap((r) => r.ideas.map((i) => i.id))].map((k) => [k, approve]))
+
   console.log('\n[3] 승인 → 커밋')
-  send({ type: 'approval:decide', commandId: state.approval.commandId, approve: true })
-  await until(() => state.approval?.decided === 'approved' && state.phase === 'idle', 30000, '승인 처리')
+  send({ type: 'approval:decide', commandId: state.approval.commandId, decisions: decisionsFor(true) })
+  await until(() => state.approval?.decided === true && state.phase === 'idle', 30000, '승인 처리')
   await sleep(500)
   for (const line of state.approval.decisionLog) console.log(`     ${line}`)
   const lastMsg = execFileSync('git', ['log', '-1', '--format=%s'], { cwd: join(fixtures, 'shop-web') }).toString().trim()
-  ok(lastMsg.startsWith('VoxelHQ: 버그 픽스'), `shop-web 최신 커밋: "${lastMsg}"`)
+  ok(lastMsg.startsWith('PixelBoss: 버그 픽스'), `shop-web 최신 커밋: "${lastMsg}"`)
   await until(() => h('shop-web') === 'clean' && h('admin-api') === 'clean' && h('landing-page') === 'clean', 20000, '재스캔')
   ok(true, '재스캔 결과 shop-web / admin-api / landing-page 모두 clean')
   ok(h('data-pipeline') === 'changed', '사용자의 기존 미커밋 변경(data-pipeline)은 건드리지 않음')
@@ -136,8 +140,8 @@ try {
   ok(state.plan.tasks.filter((t) => !t.skipped).length === 6, '문서팀 6명 병렬 실행 (첫 기록이라 전원 대상)')
   ok(existsSync(join(fixtures, 'mobile-app/CHANGELOG.md')), 'mobile-app/CHANGELOG.md 생성됨')
   const cmd2 = state.approval.commandId
-  send({ type: 'approval:decide', commandId: cmd2, approve: false })
-  await until(() => state.approval?.decided === 'rejected' && state.phase === 'idle', 30000, '반려 처리')
+  send({ type: 'approval:decide', commandId: cmd2, decisions: decisionsFor(false) })
+  await until(() => state.approval?.decided === true && state.phase === 'idle', 30000, '반려 처리')
   ok(!existsSync(join(fixtures, 'mobile-app/CHANGELOG.md')), '반려 후 CHANGELOG.md 제거됨')
   ok(existsSync(join(root, '.data/rejected', cmd2, 'mobile-app/new-files/CHANGELOG.md')), '반려된 결과물은 .data/rejected 에 보관')
   const job = readFileSync(join(fixtures, 'data-pipeline/src/job.ts'), 'utf8')

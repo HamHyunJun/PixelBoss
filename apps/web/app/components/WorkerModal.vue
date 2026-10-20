@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // 실무 에이전트 모달: 실시간 작업 상태, 에러 로그, Claude Code PTY 터미널(xterm.js)
-import { DEPARTMENTS } from '@voxelhq/shared'
+import { DEPARTMENTS } from '@pixelboss/shared'
 
 const props = defineProps<{ agentId: string }>()
 const emit = defineEmits<{ close: [] }>()
@@ -62,7 +62,7 @@ const showPrompt = ref(false)
       <section class="term-wrap">
         <h4>Claude Code PTY 세션 <span class="muted">· cwd {{ project?.path }}</span></h4>
         <TerminalView :agent-id="agentId" />
-        <p class="muted hint">터미널을 클릭하고 입력하면 PTY 로 전달됩니다 (입력 대기 상태 응답용).</p>
+        <p class="muted hint">터미널을 클릭하면 담당 프로젝트 폴더에서 Claude Code 세션이 열려 직접 입력할 수 있습니다. 지시가 배정되면 자동으로 닫히고 실행 출력으로 바뀝니다.</p>
         <template v-if="report?.files.length">
           <h4>이번 작업 변경분 · {{ report.files.length }}개 파일 (+{{ report.diffStat.insertions }} / -{{ report.diffStat.deletions }})</h4>
           <DiffView :diff="report.diff" />
@@ -75,7 +75,7 @@ const showPrompt = ref(false)
 <style scoped lang="scss">
 .grid {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 18px;
 }
 @media (max-width: 900px) {
