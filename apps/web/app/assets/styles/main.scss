@@ -1,0 +1,91 @@
+// VoxelHQ 전역 스타일
+:root {
+  --bg: #141824;
+  --panel: rgba(22, 27, 40, 0.86);
+  --panel-solid: #1a2030;
+  --line: rgba(255, 255, 255, 0.09);
+  --text: #e9ecf3;
+  --muted: #8f97ab;
+  --accent: #ff9f1a;
+  --ok: #34c759;
+  --warn: #ffcc00;
+  --err: #ff453a;
+  --info: #5ac8fa;
+  --radius: 12px;
+  --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#__nuxt {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Pretendard Variable', Pretendard, -apple-system, 'Apple SD Gothic Neo', 'Noto Sans KR', 'WenQuanYi Zen Hei', sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: background 0.15s, border-color 0.15s;
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.12);
+  }
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  &.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #1d1300;
+    font-weight: 700;
+    &:hover:not(:disabled) {
+      background: #ffb347;
+    }
+  }
+  &.danger {
+    border-color: rgba(255, 69, 58, 0.5);
+    color: #ff8a82;
+  }
+}
+
+.panel {
+  background: var(--panel);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-family: var(--mono);
+}
+
+.scroll {
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+h2,
+h3,
+h4 {
+  margin: 0;
+}

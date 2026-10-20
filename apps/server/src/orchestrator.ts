@@ -198,9 +198,9 @@ export class HQ {
         }),
       )
 
-      // 5) 팀장 결과 취합
+      // 5) 팀장 결과 취합 (수정 후 상태를 다시 스캔해 브리핑에 반영)
       this.setPhase('reviewing')
-      await sleep(FAST ? 100 : 2500)
+      await Promise.all([this.scan(), sleep(FAST ? 100 : 2500)])
       this.finishWithReports(plan, reports)
     } catch (e) {
       this.toast('error', `오케스트레이션 실패: ${String(e)}`)
@@ -235,7 +235,7 @@ export class HQ {
       cwd: project.path,
       file: process.execPath,
       args: [join(BIN_DIR, r.mode === 'claude' ? 'claude-stream.mjs' : 'mock-claude.mjs')],
-      env: { VOXELHQ_TASK_FILE: taskFile, VOXELHQ_CLAUDE_BIN: r.claudeBin, VOXELHQ_CLAUDE_ARGS: JSON.stringify(r.claudeArgs) },
+      env: { VOXELHQ_TASK_FILE: taskFile, VOXELHQ_CLAUDE_BIN: r.claudeBin, VOXELHQ_CLAUDE_ARGS: JSON.stringify([...r.claudeArgs, ...this.allowedToolsArgs(project)]) },
       timeoutSec: r.timeoutSec,
       banner: `[VoxelHQ] ${dept.name} → ${project.name} · 실행기: ${r.mode === 'claude' ? 'Claude Code CLI' : 'mock'}`,
     }
@@ -253,6 +253,13 @@ export class HQ {
       diff: diff.diff,
       outputTail: this.pty.getTail(t.agentId, 2000),
     }
+  }
+
+  /** 비대화형(-p) 실행에서도 프로젝트 검사 명령은 승인 없이 돌릴 수 있게 허용 목록을 만든다 */
+  private allowedToolsArgs(project: ProjectConfig): string[] {
+    if (this.config.runner.claudeArgs.includes('--allowedTools')) return []
+    const checks = Object.values(project.checks ?? {}).filter(Boolean) as string[]
+    return ['--allowedTools', ['Read', 'Edit', 'Write', 'Glob', 'Grep', ...checks.map((c) => `Bash(${c})`)].join(',')]
   }
 
   private finishWithReports(plan: CommandPlan, reports: ProjectReport[]) {
