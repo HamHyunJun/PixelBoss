@@ -1,0 +1,29 @@
+{
+  "name": "voxelhq",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VoxelHQ (AI Virtual Company) - 복셀 3D 가상 오피스 기반 멀티 에이전트 프로젝트 관리 대시보드",
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "concurrently -k -n server,web -c cyan,magenta \"pnpm --filter @voxelhq/server dev\" \"pnpm --filter @voxelhq/web dev\"",
+    "dev:server": "pnpm --filter @voxelhq/server dev",
+    "dev:web": "pnpm --filter @voxelhq/web dev",
+    "build": "pnpm --filter @voxelhq/web build",
+    "typecheck": "pnpm -r typecheck",
+    "fixtures": "node scripts/make-fixtures.mjs",
+    "verify": "node scripts/verify-e2e.mjs",
+    "verify:ui": "node scripts/verify-ui.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "playwright": "1.56.1"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "node-pty",
+      "esbuild",
+      "@parcel/watcher",
+      "vue-demi"
+    ]
+  }
+}
