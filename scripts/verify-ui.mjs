@@ -10,7 +10,7 @@ import { chromium } from 'playwright'
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const shots = join(root, 'docs/screenshots')
 mkdirSync(shots, { recursive: true })
-const URL = process.env.VOXELHQ_WEB ?? 'http://localhost:3000/'
+const URL = process.env.PIXELBOSS_WEB ?? 'http://localhost:3000/'
 
 let failures = 0
 const ok = (cond, label) => {
@@ -27,15 +27,15 @@ const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
 page.on('console', (m) => m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text()) && errors.push(m.text()))
 
-/** 3D 캐릭터 상태 조회 (VoxelOffice 가 window.__voxelhq 로 엔진을 노출) */
+/** 3D 캐릭터 상태 조회 (VoxelOffice 가 window.__pixelboss 로 엔진을 노출) */
 const chars = () =>
   page.evaluate(() => {
-    const e = window.__voxelhq
+    const e = window.__pixelboss
     return [...e.chars.values()].map((c) => ({ id: c.agentId, icon: c.icon, pose: c.pose, x: c.group.position.x, z: c.group.position.z, home: c.home.pos }))
   })
 const screenPos = (id) =>
   page.evaluate((agentId) => {
-    const e = window.__voxelhq
+    const e = window.__pixelboss
     const c = e.chars.get(agentId)
     const v = c.group.position.clone()
     v.y = 1.4
@@ -75,7 +75,7 @@ const waitPhase = async (label, timeout = 60000) => {
 try {
   console.log('\n[UI-1] 대시보드 로드')
   await page.goto(URL, { waitUntil: 'networkidle' })
-  await page.waitForFunction(() => !!window.__voxelhq, null, { timeout: 30000 })
+  await page.waitForFunction(() => !!window.__pixelboss, null, { timeout: 30000 })
   await page.waitForTimeout(3500)
   const c0 = await chars()
   ok(c0.length === 28, `3D 캐릭터 28명 배치 → ${c0.length}`)
@@ -110,14 +110,15 @@ try {
   await clickAgent('qa:landing-page', '[data-test=terminal] .xterm-rows')
   await page.waitForTimeout(1500)
   const termText = await page.locator('[data-test=terminal] .xterm-rows').innerText()
-  ok(/VoxelHQ|Claude Code/.test(termText), '실무자 클릭 → PTY 터미널(xterm.js) 실시간 출력 표시')
+  ok(/PixelBoss|Claude Code/.test(termText), '실무자 클릭 → PTY 터미널(xterm.js) 실시간 출력 표시')
   await page.screenshot({ path: join(shots, '05-worker-terminal.png') })
   await page.keyboard.press('Escape')
 
   ok(await waitPhase('승인 대기', 60000), '단계: 승인 대기')
-  await page.waitForSelector('[data-test=approval] [data-test=approve]')
+  await page.waitForSelector('[data-test=approval]')
+  await page.waitForSelector('[data-test=apply]')
   ok((await chars()).filter((c) => c.icon === 'done').length >= 4, '완료한 실무자 머리 위 녹색 체크')
-  ok(await until(() => page.evaluate(() => window.__voxelhq.world.paperCount >= 4), 15000), '완료한 실무자가 게시판에 리포트 서류 부착 (4장 이상)')
+  ok(await until(() => page.evaluate(() => window.__pixelboss.world.paperCount >= 4), 15000), '완료한 실무자가 게시판에 리포트 서류 부착 (4장 이상)')
   ok(await until(async () => (await chars()).filter((c) => !c.id.endsWith(':leader') && c.icon === 'done').every((c) => c.x === c.home.x && c.z === c.home.z), 15000), '서류 부착 후 자리로 복귀')
   await page.screenshot({ path: join(shots, '06-approval-card.png') })
 
@@ -129,10 +130,11 @@ try {
   await page.keyboard.press('Escape')
 
   console.log('\n[UI-3] 승인 → 커밋')
-  await page.click('[data-test=approve]')
+  await page.click('[data-test=approve-all]')
+  await page.click('[data-test=apply]')
   await page.waitForSelector('[data-test=approval] .log', { timeout: 15000 })
   const log = await page.locator('[data-test=approval] .log').innerText()
-  ok(/승인됨/.test(log) && /커밋/.test(log), `승인 결과: ${log.split('\n').slice(1).join(' / ')}`)
+  ok(/커밋/.test(log), `승인 결과: ${log.split('\n').slice(1).join(' / ')}`)
 
   console.log('\n[UI-4] 카메라 피치')
   await page.click('text=⬇ 탑뷰')

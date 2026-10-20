@@ -4,7 +4,7 @@ import { execFile, spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { CheckResult, ProjectConfig, ProjectDelta } from '@voxelhq/shared'
+import type { CheckResult, ProjectConfig, ProjectDelta } from '@pixelboss/shared'
 
 export interface ExecResult {
   code: number
@@ -42,11 +42,15 @@ export function runShell(cwd: string, command: string, timeoutSec: number): Prom
   })
 }
 
+/** 에이전트·훅이 프로젝트 안에 남기는 작업 부산물(.omc/ 등)은 변경 파일로 보지 않는다 */
+export const isArtifact = (file: string): boolean => /(^|\/)\.omc(\/|$)/.test(file)
+
 export function parseStatus(porcelain: string) {
   return porcelain
     .split('\n')
     .filter(Boolean)
     .map((line) => ({ status: line.slice(0, 2).trim() || '?', file: line.slice(3) }))
+    .filter((f) => !isArtifact(f.file))
 }
 
 export function parseShortStat(text: string) {
@@ -145,7 +149,7 @@ export interface Baseline {
 
 export async function takeBaseline(cwd: string): Promise<Baseline> {
   // git stash create 는 워킹트리를 건드리지 않고 스냅샷 커밋만 만든다
-  const stash = (await git(cwd, ['stash', 'create', 'voxelhq-baseline'])).stdout.trim()
+  const stash = (await git(cwd, ['stash', 'create', 'pixelboss-baseline'])).stdout.trim()
   const sha = stash || (await git(cwd, ['rev-parse', 'HEAD'])).stdout.trim()
   const untracked = (await git(cwd, ['ls-files', '--others', '--exclude-standard'])).stdout.split('\n').filter(Boolean)
   return { sha, untracked: new Set(untracked) }
@@ -160,8 +164,8 @@ export interface WorkDiff {
 
 /** 기준 스냅샷 이후 에이전트가 만든 변경만 추출 */
 export async function diffSinceBaseline(cwd: string, b: Baseline): Promise<WorkDiff> {
-  const names = (await git(cwd, ['diff', '--name-only', b.sha])).stdout.split('\n').filter(Boolean)
-  const nowUntracked = (await git(cwd, ['ls-files', '--others', '--exclude-standard'])).stdout.split('\n').filter(Boolean)
+  const names = (await git(cwd, ['diff', '--name-only', b.sha])).stdout.split('\n').filter((f) => f && !isArtifact(f))
+  const nowUntracked = (await git(cwd, ['ls-files', '--others', '--exclude-standard'])).stdout.split('\n').filter((f) => f && !isArtifact(f))
   const newFiles = nowUntracked.filter((f) => !b.untracked.has(f))
   let diff = names.length ? (await git(cwd, ['diff', b.sha, '--', ...names])).stdout : ''
   for (const f of newFiles) {

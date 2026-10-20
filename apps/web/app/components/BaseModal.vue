@@ -20,6 +20,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
       <div class="body scroll">
         <slot />
       </div>
+      <footer v-if="$slots.footer" class="foot">
+        <slot name="footer" />
+      </footer>
     </section>
   </div>
 </template>
@@ -41,7 +44,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
   flex-direction: column;
   background: var(--panel-solid);
   &.wide {
-    width: min(1180px, 100%);
+    width: min(1440px, 100%);
   }
 }
 header {
@@ -63,5 +66,13 @@ header {
 }
 .body {
   padding: 16px 18px 18px;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
 }
 </style>

@@ -1,5 +1,5 @@
 {
-  "$comment": "VoxelHQ 대상 프로젝트 설정 템플릿. path 는 로컬 절대 경로를 권장합니다(상대 경로는 이 파일 기준). 개인 경로는 config/projects.local.json 에 복사해 쓰면 git 에 올라가지 않습니다.",
+  "$comment": "PixelBoss 대상 프로젝트 설정 템플릿. path 는 로컬 절대 경로를 권장합니다(상대 경로는 이 파일 기준). 개인 경로는 config/projects.local.json 에 복사해 쓰면 git 에 올라가지 않습니다.",
   "runner": {
     "mode": "mock",
     "maxParallel": 6,

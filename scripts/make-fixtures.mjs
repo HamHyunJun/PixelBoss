@@ -62,7 +62,7 @@ for (const [name, files] of Object.entries(projects)) {
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, 'check.mjs'), CHECK)
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name, version: '1.0.0', type: 'module', private: true }, null, 2) + '\n')
-  writeFileSync(join(dir, 'README.md'), `# ${name}\n\nVoxelHQ 통합 검증용 가상 프로젝트\n`)
+  writeFileSync(join(dir, 'README.md'), `# ${name}\n\nPixelBoss 통합 검증용 가상 프로젝트\n`)
   for (const [f, body] of Object.entries(files)) {
     mkdirSync(dirname(join(dir, f)), { recursive: true })
     writeFileSync(join(dir, f), body)

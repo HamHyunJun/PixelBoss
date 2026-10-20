@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PtyStatus } from '@voxelhq/shared'
+import type { PtyStatus } from '@pixelboss/shared'
 
 const props = defineProps<{ status: PtyStatus | 'clean' | 'changed' | 'alert' }>()
 const LABEL: Record<string, string> = {

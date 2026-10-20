@@ -1,5 +1,5 @@
 {
-  "name": "@voxelhq/server",
+  "name": "@pixelboss/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@voxelhq/shared": "workspace:*",
+    "@pixelboss/shared": "workspace:*",
     "node-pty": "^1.1.0",
     "octokit": "^5.0.5",
     "ws": "^8.22.0"

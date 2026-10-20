@@ -1,8 +1,8 @@
 // 복셀 오피스 월드 생성 (바닥, 벽, 부서 구역, 회의실, 게시판, 책상)
 import * as THREE from 'three'
-import { DEPARTMENTS } from '@voxelhq/shared'
-import type { DepartmentId } from '@voxelhq/shared'
-import { BOARD, FLOOR, ROOM, ZONES, type DeskSpec } from './layout'
+import { DEPARTMENTS } from '@pixelboss/shared'
+import type { DepartmentId } from '@pixelboss/shared'
+import { ANNEX, BOARD, FLOOR, ROOMS, ZONES, type DeskSpec } from './layout'
 
 const geoCache = new Map<string, THREE.BoxGeometry>()
 const matCache = new Map<string, THREE.MeshLambertMaterial>()
@@ -65,7 +65,8 @@ const tint = (hex: string, toward: string, t: number) => new THREE.Color(hex).le
 
 function inZone(x: number, z: number): DepartmentId | null {
   for (const [id, zone] of Object.entries(ZONES)) {
-    if (Math.abs(x - zone.cx) <= 10 && Math.abs(z - zone.cz) <= 6.5) return id as DepartmentId
+    // 부서 방: 복도(|x|=11)부터 바깥벽까지
+    if (Math.abs(x - zone.cx) <= (FLOOR.maxX - 11) / 2 && Math.abs(z - zone.cz) <= 6.5) return id as DepartmentId
   }
   return null
 }
@@ -79,8 +80,11 @@ export interface DeskHandle {
 export function buildDesk(spec: DeskSpec, accent: string, leader = false): DeskHandle {
   const g = new THREE.Group()
   const width = leader ? 3.4 : 3
-  g.add(box(width, 0.2, 1.6, leader ? '#6b4a2f' : '#c8a27a', 0, 1.1, 0))
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.2, 1.1, 0.2, '#5b4636', sx * (width / 2 - 0.2), 0, sz * 0.6))
+  g.add(box(width, 0.18, 1.6, leader ? '#6b4a2f' : '#f1eee8', 0, 1.12, 0))
+  g.add(box(width, 0.06, 1.64, leader ? '#4a3220' : '#d3b48a', 0, 1.08, 0))
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(box(0.12, 1.1, 0.12, '#8a9099', sx * (width / 2 - 0.15), 0, sz * 0.65))
+  g.add(box(0.8, 0.9, 1.3, '#dcd9d2', width / 2 - 0.55, 0.05, 0.05)) // 서랍 캐비닛
+  for (const y of [0.3, 0.6]) g.add(box(0.6, 0.03, 0.04, '#9aa0a8', width / 2 - 0.55, y, 0.72, false))
   // 모니터 (책상 뒤쪽, 앉은 사람을 향함 = 로컬 +z)
   g.add(box(0.3, 0.4, 0.3, '#333', 0, 1.3, -0.45))
   g.add(box(1.5, 0.95, 0.12, '#222', 0, 1.65, -0.5))
@@ -112,6 +116,8 @@ export interface WorldHandle {
   addPaper(color: string): void
   clearPapers(): void
   readonly paperCount: number
+  /** 붙어 있는 리포트 색 (월드를 다시 만든 뒤 복원용) */
+  readonly paperColors: string[]
 }
 
 export function buildWorld(): WorldHandle {
@@ -131,12 +137,12 @@ export function buildWorld(): WorldHandle {
       m4.makeTranslation(x, -0.15, z)
       floor.setMatrixAt(i, m4)
       const zone = inZone(x, z)
-      const inRoom = x > ROOM.minX && x < ROOM.maxX && z > ROOM.minZ && z < ROOM.maxZ
       const checker = (ix + iz) % 2 === 0 ? 0 : 0.04
+      const room = ROOMS.find((r) => x > r.minX && x < r.maxX && z > r.minZ && z < r.maxZ)
       let c: THREE.Color
-      if (inRoom) c = tint('#b98b5e', '#000', checker)
-      else if (zone) c = tint(DEPARTMENTS.find((d) => d.id === zone)!.color, '#f4f1ea', 0.72 + checker)
-      else c = tint('#d9d6cf', '#000', checker)
+      if (room) c = tint(room.floor, '#000', checker)
+      else if (zone) c = tint(DEPARTMENTS.find((d) => d.id === zone)!.color, '#c9ced6', 0.9 + checker / 2) // 차분한 회색 카펫 타일에 부서 색을 살짝만
+      else c = tint('#dcc9a9', '#000', checker * 0.8) // 복도·동선은 밝은 목재 마루
       floor.setColorAt(i++, c)
     }
   }
@@ -145,54 +151,25 @@ export function buildWorld(): WorldHandle {
 
   // 북쪽·서쪽 벽 (반대편은 시야 확보를 위해 비움)
   for (let x = FLOOR.minX; x < FLOOR.maxX; x += 2) {
+    if (x + 1 > ANNEX.minX && x + 1 < ANNEX.maxX) continue // 사장실 별관 구간은 decor.ts 에서 만든다
     root.add(box(2, 4, 1, (x / 2) % 2 === 0 ? '#ece6da' : '#e3dccd', x + 1, 0, FLOOR.minZ - 0.5))
   }
   for (let z = FLOOR.minZ; z < FLOOR.maxZ; z += 2) {
     root.add(box(1, 4, 2, (z / 2) % 2 === 0 ? '#ece6da' : '#e3dccd', FLOOR.minX - 0.5, 0, z + 1))
   }
   // 창문
-  for (const x of [-26, -18, 18, 26]) root.add(box(4, 1.6, 0.1, '#9fd3f5', x, 1.6, FLOOR.minZ + 0.02, false))
-
-  // 회의실: 유리 파티션 (출입구는 동·서쪽 가운데)
-  const glass = new THREE.MeshLambertMaterial({ color: '#bfe3ff', transparent: true, opacity: 0.35 })
-  const frame = '#8aa0b4'
-  for (let x = ROOM.minX; x < ROOM.maxX; x += 2) {
-    for (const z of [ROOM.minZ, ROOM.maxZ]) {
-      root.add(box(2, 1.8, 0.15, glass, x + 1, 0.2, z, false))
-      root.add(box(2, 0.2, 0.3, frame, x + 1, 0, z))
-    }
-  }
-  for (let z = ROOM.minZ; z < ROOM.maxZ; z += 2) {
-    if (z + 1 > -1.6 && z + 1 < 1.6) continue // 출입구
-    for (const x of [ROOM.minX, ROOM.maxX]) {
-      root.add(box(0.15, 1.8, 2, glass, x, 0.2, z + 1, false))
-      root.add(box(0.3, 0.2, 2, frame, x, 0, z + 1))
-    }
-  }
-  // 대형 회의 테이블
-  root.add(box(9, 0.3, 2.8, '#7a5233', 0, 1.0, 0))
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) root.add(box(0.3, 1.0, 0.3, '#4e3420', sx * 4.1, 0, sz * 1.1))
-  root.add(box(1.2, 0.5, 0.8, '#2b2b33', 0, 1.3, 0)) // 중앙 프로젝터
-  const roomSign = textSprite('중앙 회의실 · 전체 소집', { bg: 'rgba(30,30,40,0.75)', size: 40, scale: 0.8 })
-  roomSign.position.set(0, 4.2, ROOM.minZ)
-  root.add(roomSign)
-  // 화분
-  for (const [x, z] of [
-    [-7.2, -4.2],
-    [7.2, 4.2],
-    [-30, 24],
-    [30, -24],
-  ] as const) {
-    root.add(box(0.8, 0.8, 0.8, '#a0522d', x, 0, z))
-    root.add(box(1.0, 1.0, 1.0, '#3f9b4b', x, 0.8, z))
-    root.add(box(0.6, 0.6, 0.6, '#52b45f', x, 1.8, z))
+  // 북쪽 띠의 회의실·사장실 뒤쪽 창문 (8칸마다 하나)
+  for (const r of ROOMS) {
+    if (r.minZ !== FLOOR.minZ || r.id === 'ceo') continue
+    for (let x = r.minX + 4; x < r.maxX; x += 8) root.add(box(4, 1.6, 0.1, '#9fd3f5', x, 1.6, FLOOR.minZ + 0.02, false))
   }
 
   // 부서 간판
   for (const d of DEPARTMENTS) {
     const z = ZONES[d.id]
-    const sign = textSprite(d.name, { bg: d.color, size: 44, scale: 0.85 })
-    sign.position.set(z.cx, 5.2, z.cz - z.sz * 7.2)
+    const sign = textSprite(d.name, { bg: d.color, size: 40, scale: 0.7 })
+    // 부서 입구(복도 쪽 개구부) 위에 건다
+    sign.position.set(z.sx * 12.5, 4.2, z.cz)
     root.add(sign)
   }
 
@@ -207,10 +184,12 @@ export function buildWorld(): WorldHandle {
   root.add(board)
 
   const papers: THREE.Mesh[] = []
+  const colors: string[] = []
   return {
     root,
     board,
     addPaper(color: string) {
+      colors.push(color)
       const n = papers.length
       const cols = 12
       const p = box(0.9, 1.1, 0.05, '#fbfaf5', -BOARD.width / 2 + 0.8 + (n % cols) * 1.1, 0.3 + (1 - (Math.floor(n / cols) % 2)) * 1.4, 0.2, false)
@@ -220,10 +199,14 @@ export function buildWorld(): WorldHandle {
       board.add(p)
     },
     clearPapers() {
+      colors.length = 0
       for (const p of papers.splice(0)) board.remove(p)
     },
     get paperCount() {
       return papers.length
+    },
+    get paperColors() {
+      return colors
     },
   }
 }

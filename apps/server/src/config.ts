@@ -1,8 +1,8 @@
 // config/projects.json(또는 projects.local.json) 로더
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ProjectConfig } from '@voxelhq/shared'
+import type { ProjectConfig, ScheduleConfig } from '@pixelboss/shared'
 
 export type RunnerMode = 'mock' | 'claude'
 
@@ -16,6 +16,7 @@ export interface HQConfig {
   }
   scan: { intervalSec: number; runChecks: boolean; checkTimeoutSec: number }
   projects: ProjectConfig[]
+  schedules: ScheduleConfig[]
   /** 실제로 읽은 설정 파일 경로 */
   source: string
 }
@@ -24,7 +25,7 @@ export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..
 
 export function loadConfig(): HQConfig {
   const candidates = [
-    process.env.VOXELHQ_CONFIG,
+    process.env.PIXELBOSS_CONFIG,
     resolve(REPO_ROOT, 'config/projects.local.json'),
     resolve(REPO_ROOT, 'config/projects.json'),
   ].filter(Boolean) as string[]
@@ -37,15 +38,14 @@ export function loadConfig(): HQConfig {
     ...p,
     path: isAbsolute(p.path) ? p.path : resolve(baseDir, p.path),
   }))
-  if (projects.length === 0) throw new Error('projects 가 비어 있습니다')
   const ids = new Set<string>()
   for (const p of projects) {
     if (!p.id || ids.has(p.id)) throw new Error(`프로젝트 id 가 없거나 중복입니다: ${p.id}`)
     ids.add(p.id)
   }
 
-  // 환경 변수로 실행기 모드 전환 가능 (VOXELHQ_RUNNER=claude)
-  const mode = (process.env.VOXELHQ_RUNNER ?? raw.runner?.mode ?? 'mock') as RunnerMode
+  // 환경 변수로 실행기 모드 전환 가능 (PIXELBOSS_RUNNER=claude)
+  const mode = (process.env.PIXELBOSS_RUNNER ?? raw.runner?.mode ?? 'mock') as RunnerMode
   return {
     runner: {
       mode: mode === 'claude' ? 'claude' : 'mock',
@@ -60,6 +60,18 @@ export function loadConfig(): HQConfig {
       checkTimeoutSec: raw.scan?.checkTimeoutSec ?? 120,
     },
     projects,
+    schedules: Array.isArray(raw.schedules) ? raw.schedules : [],
     source,
   }
+}
+
+/** 화면에서 바꾼 프로젝트 목록·실행기 모드를 설정 파일에 저장한다 (기본은 git 에 안 올라가는 projects.local.json) */
+export function saveProjects(config: HQConfig): void {
+  const raw = JSON.parse(readFileSync(config.source, 'utf8'))
+  raw.projects = config.projects
+  raw.schedules = config.schedules
+  raw.runner = { ...raw.runner, mode: config.runner.mode }
+  const target = process.env.PIXELBOSS_CONFIG ?? resolve(REPO_ROOT, 'config/projects.local.json')
+  writeFileSync(target, JSON.stringify(raw, null, 2) + '\n')
+  config.source = target
 }

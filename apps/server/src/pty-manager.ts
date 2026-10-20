@@ -1,8 +1,19 @@
 // node-pty 다중 프로세스 관리자
 // 실무 에이전트 1명 = PTY 세션 1개. 동시 실행 수는 maxParallel 로 제한하고 나머지는 대기열에 둔다.
 import { EventEmitter } from 'node:events'
+import { chmodSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import * as pty from 'node-pty'
-import type { PtyStatus } from '@voxelhq/shared'
+import type { PtyStatus } from '@pixelboss/shared'
+
+// pnpm 이 prebuild 의 spawn-helper 실행 권한을 지우면 모든 PTY 실행이 posix_spawnp failed 로 실패한다. 시작할 때 복구한다.
+try {
+  const root = dirname(createRequire(import.meta.url).resolve('node-pty/package.json'))
+  chmodSync(join(root, 'prebuilds', `${process.platform}-${process.arch}`, 'spawn-helper'), 0o755)
+} catch {
+  /* prebuild 가 없는 플랫폼(소스 빌드)이면 해당 없음 */
+}
 
 export interface SpawnSpec {
   agentId: string
@@ -25,6 +36,8 @@ interface Session {
   idleTimer?: NodeJS.Timeout
   killTimer?: NodeJS.Timeout
   exitCode?: number | null
+  /** 사용자가 직접 연 대화형 세션 (지시 실행 세션과 달리 상태·동시 실행 수에 포함하지 않는다) */
+  manual?: boolean
 }
 
 const HISTORY_LIMIT = 256 * 1024
@@ -85,6 +98,7 @@ export class PtyManager extends EventEmitter {
   run(spec: SpawnSpec): Promise<number | null> {
     const s = this.session(spec.agentId)
     if (this.isBusy(spec.agentId)) return Promise.reject(new Error(`${spec.agentId} 는 이미 작업 중입니다`))
+    this.closeManual(s) // 지시가 오면 사용자가 열어둔 대화형 세션은 닫고 자리를 비운다
     s.history = ''
     s.exitCode = undefined
     this.emit('reset', spec.agentId)
@@ -116,7 +130,7 @@ export class PtyManager extends EventEmitter {
         env: { ...process.env, ...spec.env, TERM: 'xterm-256color', FORCE_COLOR: '1' } as Record<string, string>,
       })
     } catch (e) {
-      this.append(s, `\r\n\x1b[31m[VoxelHQ] PTY 실행 실패: ${String(e)}\x1b[0m\r\n`)
+      this.append(s, `\r\n\x1b[31m[PixelBoss] PTY 실행 실패: ${String(e)}\x1b[0m\r\n`)
       this.running--
       s.exitCode = 127
       this.setStatus(s, 'error')
@@ -139,7 +153,7 @@ export class PtyManager extends EventEmitter {
     })
 
     s.killTimer = setTimeout(() => {
-      this.append(s, `\r\n\x1b[31m[VoxelHQ] ${spec.timeoutSec}초 제한 시간 초과로 종료합니다\x1b[0m\r\n`)
+      this.append(s, `\r\n\x1b[31m[PixelBoss] ${spec.timeoutSec}초 제한 시간 초과로 종료합니다\x1b[0m\r\n`)
       proc.kill()
     }, spec.timeoutSec * 1000)
 
@@ -148,12 +162,53 @@ export class PtyManager extends EventEmitter {
       clearTimeout(s.killTimer)
       s.proc = undefined
       s.exitCode = exitCode
-      this.append(s, `\r\n\x1b[2m[VoxelHQ] 프로세스 종료 (exit ${exitCode})\x1b[0m\r\n`)
+      this.append(s, `\r\n\x1b[2m[PixelBoss] 프로세스 종료 (exit ${exitCode})\x1b[0m\r\n`)
       this.running--
       this.setStatus(s, exitCode === 0 ? 'done' : 'error')
       resolve(exitCode)
       this.pump()
     })
+  }
+
+  private closeManual(s: Session) {
+    if (!s.manual) return
+    s.manual = false
+    s.proc?.kill()
+    s.proc = undefined
+  }
+
+  /**
+   * 사용자 셸을 프로젝트 폴더에서 열고 command(claude)를 실행한다. 셸 위에서 돌리므로 claude 가 없거나 종료돼도 터미널은 남는다.
+   * 이미 세션이 살아 있거나 지시 실행 중이면 아무것도 하지 않는다.
+   */
+  openManual(agentId: string, cwd: string, command: string): boolean {
+    const s = this.session(agentId)
+    if (s.proc || this.isBusy(agentId)) return false
+    let proc: pty.IPty
+    try {
+      proc = pty.spawn(process.env.SHELL || '/bin/zsh', ['-i'], {
+        name: 'xterm-256color',
+        cols: s.cols,
+        rows: s.rows,
+        cwd,
+        env: { ...process.env, TERM: 'xterm-256color' } as Record<string, string>,
+      })
+    } catch (e) {
+      this.append(s, `\r\n\x1b[31m[PixelBoss] 세션 열기 실패: ${String(e)}\x1b[0m\r\n`)
+      return false
+    }
+    s.proc = proc
+    s.manual = true
+    this.append(s, `\x1b[38;5;214m[PixelBoss] ${cwd} 에서 대화형 세션을 엽니다\x1b[0m\r\n`)
+    proc.onData((data) => s.proc === proc && this.append(s, data))
+    proc.onExit(({ exitCode }) => {
+      if (s.proc !== proc) return // 지시 실행이 이 세션을 닫고 새 PTY 를 시작한 경우
+      s.proc = undefined
+      s.manual = false
+      this.append(s, `\r\n\x1b[2m[PixelBoss] 세션 종료 (exit ${exitCode}) — 터미널을 클릭하면 다시 열립니다\x1b[0m\r\n`)
+    })
+    setTimeout(() => s.proc === proc && proc.write(`${command}\r`), 300)
+    return true
   }
 
   write(agentId: string, data: string) {
@@ -175,6 +230,19 @@ export class PtyManager extends EventEmitter {
   resetToIdle(agentId: string) {
     const s = this.sessions.get(agentId)
     if (s && !this.isBusy(agentId)) this.setStatus(s, 'idle')
+  }
+
+  /** 세션 기록을 지운다 (프로젝트 삭제용). 실행 중이면 무시한다 */
+  forget(agentId: string) {
+    const s = this.sessions.get(agentId)
+    if (!s || this.isBusy(agentId)) return
+    this.closeManual(s)
+    this.sessions.delete(agentId)
+  }
+
+  /** 실행 중인 세션 하나를 종료한다 (파이프라인 중단용) */
+  kill(agentId: string) {
+    this.sessions.get(agentId)?.proc?.kill()
   }
 
   killAll() {
