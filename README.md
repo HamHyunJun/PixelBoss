@@ -126,7 +126,8 @@ PIXELBOSS_RUNNER=claude pnpm dev   # 또는 config/projects.json 의 runner.mode
 pnpm typecheck   # shared / server / web 타입 검사
 pnpm verify      # 백엔드 통합 검증: 가상 프로젝트 6개 → 정적 필터 → 소집 → PTY 병렬 → 승인/반려 → Clean 시 토큰 0
 pnpm fixtures && pnpm dev   # 다른 터미널에서 ↓
-pnpm verify:ui   # 브라우저 통합 검증 (Playwright, 스크린샷은 docs/screenshots)
+pnpm verify:ui   # 브라우저 통합 검증 (Playwright): 지시 → 제안 보고서 → 개발 파이프라인 → 병합 → 히스토리, 스크린샷은 docs/screenshots 를 덮어씀
+                 # 병합·스케줄 추가로 fixtures 와 .data 가 바뀌므로 가상 프로젝트 + 깨끗한 .data 에서 mock 실행기로 실행
 ```
 
 ## 구조

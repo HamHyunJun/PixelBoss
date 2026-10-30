@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // 통합 검증 스크립트 (브라우저 흐름) — `pnpm dev` 가 떠 있는 상태에서 실행
-// 전체 소집 명령 → PTY 병렬 스폰 → 3D 캐릭터 상태 동기화 → 모달/터미널 → 승인 카드 → 커밋 까지 실제 화면으로 검증한다.
-// 사용법: pnpm fixtures && pnpm dev  (다른 터미널에서)  pnpm verify:ui
+// 지시 → 부서별 제안 보고서 → 제안 승인 → 개발 파이프라인(구현·QA) → 최종 반영 → 히스토리 까지 실제 화면으로 검증하고 스크린샷을 남긴다.
+// 반영·스케줄 추가로 fixtures 와 .data 가 바뀌므로 `pnpm fixtures` 로 만든 가상 프로젝트 + 깨끗한 .data 에서 mock 실행기로 돌릴 것.
+// 사용법: pnpm fixtures && pnpm dev  (다른 터미널에서)  pnpm verify:ui   (프론트 주소가 다르면 PIXELBOSS_WEB)
 import { mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -27,26 +28,31 @@ const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
 page.on('console', (m) => m.type() === 'error' && !/ERR_TUNNEL|Failed to load resource/.test(m.text()) && errors.push(m.text()))
 
+/** 스크린샷에 로컬 절대 경로가 남지 않도록 화면 텍스트의 저장소 경로를 ~/dev/ 로 바꾼다 */
+const maskPaths = (repo) =>
+  page.evaluate((r) => {
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)
+    for (let n; (n = w.nextNode()); ) n.nodeValue = n.nodeValue.split(`${r}/`).join('~/dev/')
+  }, repo)
+const shot = async (name, clip) => {
+  await maskPaths(root)
+  await page.screenshot({ path: join(shots, `${name}.png`), clip })
+}
+
 /** 3D 캐릭터 상태 조회 (VoxelOffice 가 window.__pixelboss 로 엔진을 노출) */
 const chars = () =>
-  page.evaluate(() => {
-    const e = window.__pixelboss
-    return [...e.chars.values()].map((c) => ({ id: c.agentId, icon: c.icon, pose: c.pose, x: c.group.position.x, z: c.group.position.z, home: c.home.pos }))
-  })
-const screenPos = (id) =>
-  page.evaluate((agentId) => {
-    const e = window.__pixelboss
-    const c = e.chars.get(agentId)
-    const v = c.group.position.clone()
-    v.y = 1.4
-    v.project(e.camera)
-    const r = e.renderer.domElement.getBoundingClientRect()
-    return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }
-  }, id)
+  page.evaluate(() => [...window.__pixelboss.chars.values()].map((c) => ({ id: c.agentId, icon: c.icon })))
 /** 캐릭터를 레이캐스팅 클릭. 걷는 중이면 위치가 바뀌므로 몇 번 재시도 */
 const clickAgent = async (id, selector) => {
-  for (let i = 0; i < 6; i++) {
-    const p = await screenPos(id)
+  for (let i = 0; i < 8; i++) {
+    const p = await page.evaluate((agentId) => {
+      const e = window.__pixelboss
+      const v = e.chars.get(agentId).group.position.clone()
+      v.y = 1.4
+      v.project(e.camera)
+      const r = e.renderer.domElement.getBoundingClientRect()
+      return { x: r.left + ((v.x + 1) / 2) * r.width, y: r.top + ((1 - v.y) / 2) * r.height }
+    }, id)
     await page.mouse.click(p.x, p.y)
     if (await page.waitForSelector(selector, { timeout: 1500 }).catch(() => null)) return
   }
@@ -63,14 +69,12 @@ const until = async (fn, timeout = 15000) => {
 }
 const pitch = async () => parseInt((await page.locator('[data-test=pitch]').textContent()) ?? '')
 const phase = () => page.locator('[data-test=phase] li.active').textContent().catch(() => null)
-const waitPhase = async (label, timeout = 60000) => {
-  const t0 = Date.now()
-  while (Date.now() - t0 < timeout) {
-    if ((await phase())?.trim() === label) return true
-    await page.waitForTimeout(150)
-  }
-  return false
+const waitPhase = (label, timeout = 60000) => until(async () => (await phase())?.trim() === label, timeout)
+const closeModal = async () => {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(400)
 }
+const boardText = () => page.locator('[data-test=pipeline-board]').textContent().catch(() => '')
 
 try {
   console.log('\n[UI-1] 대시보드 로드')
@@ -78,71 +82,106 @@ try {
   await page.waitForFunction(() => !!window.__pixelboss, null, { timeout: 30000 })
   await page.waitForTimeout(3500)
   const c0 = await chars()
-  ok(c0.length === 28, `3D 캐릭터 28명 배치 → ${c0.length}`)
-  ok((await page.locator('[data-test=pitch]').textContent())?.trim() === '45°', '기본 시점: 45° 아이소메트릭')
-  await page.screenshot({ path: join(shots, '01-office-iso.png') })
+  const leaders = c0.filter((c) => c.id.endsWith(':leader')).length
+  ok(leaders === 5 && c0.length === 5 * 7 + 1, `5개 부서 × (팀장 1 + 담당자 6) + 대표 1 = 36명 배치 → ${c0.length}명 (팀장 ${leaders})`)
+  ok((await pitch()) === 45, '기본 시점: 45° 아이소메트릭')
+  await shot('01-office-iso')
 
-  console.log('\n[UI-2] 전체 소집 명령 입력')
-  await page.fill('[data-test=command-input]', '버그 픽스 및 접근성 표준 검사 적용')
+  console.log('\n[UI-2] 지시 → 부서별 제안 보고서')
+  await page.fill('[data-test=command-input]', '강제 각 프로젝트 별로 개선사항, 추가 아이디어 보고해')
   await page.click('[data-test=command-submit]')
   ok(await waitPhase('팀장 소집', 10000), '단계: 팀장 소집')
-  const met = await until(async () => (await chars()).filter((c) => c.id.endsWith(':leader')).every((l) => Math.abs(l.x) < 8 && Math.abs(l.z) < 5), 8000)
-  ok(met, '팀장 4명 모두 중앙 회의실 테이블로 이동')
-  await page.screenshot({ path: join(shots, '02-all-hands-meeting.png') })
-
-  ok(await waitPhase('업무 하달', 10000), '단계: 업무 하달')
-  ok(await until(async () => Math.abs((await chars()).find((c) => c.id === 'qa:leader').x) > 12, 6000), 'QA 팀장이 부서로 복귀해 실무자에게 이동')
-  await page.screenshot({ path: join(shots, '03-dispatch.png') })
-
-  ok(await waitPhase('PTY 실행', 15000), '단계: PTY 실행')
-  // 작업 중(톱니바퀴) → 완료(체크) 아이콘을 띄운 실무자를 누적 수집 (짧은 작업은 샘플 사이에 끝날 수 있음)
-  const seen = new Map()
-  await until(async () => {
-    for (const c of await chars()) if (!c.id.endsWith(':leader') && (c.icon === 'working' || c.icon === 'done')) seen.set(c.id, [...new Set([...(seen.get(c.id) ?? []), c.icon])])
-    return seen.size >= 4
-  }, 10000)
-  const working = [...seen.keys()].map((id) => ({ id }))
-  ok(working.length === 4 && [...seen.values()].filter((v) => v.includes('working')).length >= 3, `PTY 상태 → 3D 아이콘 동기화: ${[...seen].map(([id, v]) => `${id}(${v.join('→')})`).join(', ')}`)
-  await page.screenshot({ path: join(shots, '04-working.png') })
-  ok(!working.some((c) => c.id === 'qa:mobile-app' || c.id === 'qa:design-system'), 'Clean 프로젝트 담당자는 작업하지 않음')
-
-  // 작업 중인 실무자 클릭 → xterm 터미널 모달
-  await clickAgent('qa:landing-page', '[data-test=terminal] .xterm-rows')
-  await page.waitForTimeout(1500)
-  const termText = await page.locator('[data-test=terminal] .xterm-rows').innerText()
-  ok(/PixelBoss|Claude Code/.test(termText), '실무자 클릭 → PTY 터미널(xterm.js) 실시간 출력 표시')
-  await page.screenshot({ path: join(shots, '05-worker-terminal.png') })
-  await page.keyboard.press('Escape')
-
-  ok(await waitPhase('승인 대기', 60000), '단계: 승인 대기')
+  ok(await waitPhase('승인 대기', 120000), '단계: 승인 대기 (제안 보고 완료)')
   await page.waitForSelector('[data-test=approval]')
-  await page.waitForSelector('[data-test=apply]')
-  ok((await chars()).filter((c) => c.icon === 'done').length >= 4, '완료한 실무자 머리 위 녹색 체크')
-  ok(await until(() => page.evaluate(() => window.__pixelboss.world.paperCount >= 4), 15000), '완료한 실무자가 게시판에 리포트 서류 부착 (4장 이상)')
-  ok(await until(async () => (await chars()).filter((c) => !c.id.endsWith(':leader') && c.icon === 'done').every((c) => c.x === c.home.x && c.z === c.home.z), 15000), '서류 부착 후 자리로 복귀')
-  await page.screenshot({ path: join(shots, '06-approval-card.png') })
+  await page.waitForTimeout(1500)
+  const ideas = await page.locator('[data-test=report-idea]').count()
+  ok(ideas > 0, `보고서에 제안 ${ideas}건 (코드는 아직 수정되지 않음)`)
+  await shot('06-report-proposals')
 
-  // 팀장 클릭 → 부서 통합 브리핑
-  await clickAgent('qa:leader', '[data-test=leader-table]')
-  const rows = await page.locator('[data-test=leader-table] tbody tr').count()
-  ok(rows === 6, `팀장 클릭 → 부서 통합 브리핑 (프로젝트 ${rows}개)`)
-  await page.screenshot({ path: join(shots, '07-leader-briefing.png') })
-  await page.keyboard.press('Escape')
-
-  console.log('\n[UI-3] 승인 → 커밋')
+  console.log('\n[UI-3] 제안 승인 → 개발 파이프라인')
   await page.click('[data-test=approve-all]')
   await page.click('[data-test=apply]')
-  await page.waitForSelector('[data-test=approval] .log', { timeout: 15000 })
-  const log = await page.locator('[data-test=approval] .log').innerText()
-  ok(/커밋/.test(log), `승인 결과: ${log.split('\n').slice(1).join(' / ')}`)
+  await page.waitForSelector('[data-test=pipeline-board]', { timeout: 20000 })
+  await page.waitForTimeout(600)
+  await shot('04-working')
+  ok(await until(async () => (await chars()).some((c) => !c.id.endsWith(':leader') && c.icon === 'working'), 15000), '개발팀 담당자 머리 위 작업 중 아이콘')
+  ok(await until(async () => /결정 대기/.test(await boardText()), 90000), '파이프라인: 구현 → QA 통과 → 최종 반영 결정 대기')
+  await page.waitForTimeout(3000)
+  await closeModal() // 결정 대기가 되면 자동으로 열리는 파이프라인 모달
+  await closeModal()
+  await shot('07-pipeline-board')
 
-  console.log('\n[UI-4] 카메라 피치')
+  console.log('\n[UI-4] 최종 반영 (병합) → 문서팀 히스토리')
+  await page.locator('[data-pipeline]').filter({ hasText: '결정 대기' }).first().click()
+  await page.waitForSelector('[data-test=pipeline-detail]')
+  await page.locator('[data-test=pipeline-final]').scrollIntoViewIfNeeded()
+  await page.waitForTimeout(400)
+  ok(/diff|\+1/.test((await page.locator('[data-test=pipeline-final]').textContent()) ?? ''), '최종 결정 카드에 변경 diff 표시')
+  await shot('09-pipeline-final')
+  // 병합은 되돌리기 어려워 한 번 더 눌러 확인하는 버튼
+  await page.click('[data-test=pipeline-merge]')
+  await page.waitForTimeout(300)
+  await page.click('[data-test=pipeline-merge]')
+  ok(await until(async () => /반영됨/.test((await page.locator('[data-test=pipeline-state]').textContent().catch(() => '')) ?? ''), 15000), '병합 후 상태: 반영됨')
+  await closeModal()
+  await page.click('[data-test=open-history]')
+  await page.waitForSelector('[data-test=history-list] button')
+  await page.locator('[data-test=history-list] button').first().click()
+  await page.waitForTimeout(800)
+  ok(((await page.locator('[data-test=history-doc]').textContent()) ?? '').includes('진행 기록'), '문서팀 히스토리에 진행 기록 저장')
+  await shot('14-history')
+  await closeModal()
+
+  console.log('\n[UI-5] 팀장·실무자·이슈·스케줄·프로젝트 모달')
+  await clickAgent('dev:leader', '[data-test=leader-table]')
+  const rows = await page.locator('[data-test=leader-table] tbody tr').count()
+  ok(rows === 6, `팀장 클릭 → 부서 통합 브리핑 (프로젝트 ${rows}개)`)
+  await page.waitForTimeout(400)
+  await shot('10-leader-briefing')
+  await closeModal()
+
+  await page.click('[data-test=open-issues]')
+  await page.waitForTimeout(700)
+  ok((await page.locator('text=이슈 보고').count()) > 0, '🚨 이슈 보고 모달')
+  await shot('11-issues')
+  await closeModal()
+
+  await page.click('[data-test=open-schedules]')
+  // 스케줄은 설정 파일에 저장되어 이전 실행분이 남아 있을 수 있으므로 증가량으로 확인한다
+  const schBefore = await page.locator('[data-test=schedule-list] > *').count()
+  await page.fill('[data-test=sch-time]', '09:00')
+  await page.fill('[data-test=sch-text]', '각 프로젝트의 타입 에러와 린트 오류를 점검해 변경안을 보고')
+  await page.click('button:has-text("평일")')
+  await page.click('[data-test=sch-add]')
+  ok(await until(async () => (await page.locator('[data-test=schedule-list] > *').count()) === schBefore + 1, 5000), '스케줄 추가 (평일 09:00)')
+  await shot('12-schedule')
+  await closeModal()
+
+  await page.click('[data-test=open-projects]')
+  await page.waitForSelector('[data-test=project-list]')
+  ok((await page.locator('[data-test=project-list] > *').count()) === 6, '프로젝트 관리: 등록된 6개 표시')
+  // 폴더 탐색기는 홈 디렉터리 목록이 보이므로 스크린샷에서 잘라낸다
+  await shot('13-projects', { x: 80, y: 20, width: 1440, height: 540 })
+  await closeModal()
+
+  // 모달·토스트가 모두 사라진 뒤 실무자 터미널
+  await page.waitForTimeout(5000)
+  await clickAgent('qa:shop-web', '[data-test=terminal] .xterm-rows')
+  await page.waitForTimeout(1200)
+  const termText = await page.locator('[data-test=terminal] .xterm-rows').innerText()
+  ok(/PixelBoss|Claude Code/.test(termText), '실무자 클릭 → PTY 터미널(xterm.js) 출력 표시')
+  await shot('05-worker-terminal')
+  await closeModal()
+
+  console.log('\n[UI-6] 카메라 피치')
   await page.click('text=⬇ 탑뷰')
   ok(await until(async () => (await pitch()) === 90, 5000), '탑뷰 버튼 → 수직 90°')
-  await page.screenshot({ path: join(shots, '08-top-view.png') })
+  await page.waitForTimeout(1500)
+  await shot('15-top-view')
   await page.click('text=⬆ 사이드')
   ok(await until(async () => (await pitch()) === 0, 5000), '사이드 버튼 → 수평 0°')
-  await page.screenshot({ path: join(shots, '09-side-view.png') })
+  await page.waitForTimeout(1500)
+  await shot('16-side-view')
   // 마우스 드래그: 아래로 끌면 탑뷰 쪽, 위로 끌면 수평 쪽
   await page.click('text=◩ 45° 아이소')
   await until(async () => (await pitch()) === 45, 5000)
