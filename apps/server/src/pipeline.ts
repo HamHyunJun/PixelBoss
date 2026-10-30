@@ -36,6 +36,9 @@ export interface AgentRunResult {
   exitCode: number | null
   summary: string
   outputTail: string
+  /** claude 실행기에서만 채워진다 (mock 은 비용 없음) */
+  costUsd?: number
+  turns?: number
 }
 
 /** 오케스트레이터가 파이프라인에 빌려주는 기능 */

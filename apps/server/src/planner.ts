@@ -84,8 +84,11 @@ function buildPrompt(text: string, dept: DepartmentId, p: ProjectConfig, d: Proj
   const info = DEPARTMENTS.find((x) => x.id === dept)!
   const lines = [
     `[PixelBoss · ${info.name} 실무 에이전트 · 담당 프로젝트: ${p.name}]`,
-    `상위 지시(사용자): ${text}`,
-    `부서 임무: ${info.mission}`,
+    '## 사용자 지시 (최우선)',
+    text,
+    '',
+    '아래 부서 임무·정적 분석·작업 규칙은 이 지시를 수행하기 위한 참고 자료입니다. 지시가 있으면 보고서 전체가 이 지시에 대한 답이어야 하며, 지시와 무관한 일반 개선안(리팩토링·성능 등)을 대신 내지 마세요.',
+    `부서 임무(참고): ${info.mission}`,
     '',
     '## 1차 정적 분석 결과 (오케스트레이터가 미리 수집, 다시 스캔할 필요 없음)',
     `- 브랜치: ${d?.branch ?? '?'} @ ${d?.head ?? '?'}`,
@@ -106,9 +109,9 @@ function buildPrompt(text: string, dept: DepartmentId, p: ProjectConfig, d: Proj
   lines.push(
     '',
     '## 작업 규칙',
-    '1. 위에 나온 파일·에러와 관련된 범위만 읽으세요. 저장소 전체를 훑지 마세요(토큰 절약).',
+    '1. 사용자 지시와 관련된 파일·에러 범위만 읽으세요. 저장소 전체를 훑지 마세요(토큰 절약).',
     '2. 이번 단계는 제안 보고입니다. 코드나 파일을 수정하지 말고 git 명령도 쓰지 마세요.',
-    `3. ${DEPT_GUIDE[dept]}`,
+    `3. 부서 기본 지침(지시가 구체적이면 탐색 범위만 참고하고, 끝의 읽기 전용·제안 형식 규칙은 항상 지키세요): ${DEPT_GUIDE[dept]}`,
     '4. 최종 답변 전체가 사용자에게 보고서로 그대로 보여집니다. 도구 사용 과정이 아니라 변경안을 한국어 문장으로 정리하세요.',
   )
   return lines.join('\n')
