@@ -11,6 +11,7 @@ const extra = JSON.parse(process.env.PIXELBOSS_CLAUDE_ARGS || '[]')
 // 최종 답변은 파일로도 남겨 오케스트레이터가 보고서(한글 본문)로 쓸 수 있게 한다
 const resultFile = process.env.PIXELBOSS_RESULT_FILE
 let lastText = ''
+let usage
 const c = { dim: '\x1b[2m', orange: '\x1b[38;5;214m', green: '\x1b[32m', cyan: '\x1b[36m', red: '\x1b[31m', reset: '\x1b[0m' }
 const say = (s = '') => process.stdout.write(s.replace(/\n/g, '\r\n') + '\r\n')
 
@@ -48,6 +49,7 @@ createInterface({ input: child.stdout }).on('line', (line) => {
     }
   } else if (ev.type === 'result') {
     if (typeof ev.result === 'string' && ev.result.trim()) lastText = ev.result.trim()
+    usage = { costUsd: ev.total_cost_usd ?? 0, turns: ev.num_turns ?? 0 }
     say()
     const ok = ev.subtype === 'success' && !ev.is_error
     say(`${ok ? c.green + '✔ 완료' : c.red + '✖ 실패'}${c.reset} · ${ev.num_turns ?? '?'}턴 · $${(ev.total_cost_usd ?? 0).toFixed(4)}`)
@@ -56,6 +58,7 @@ createInterface({ input: child.stdout }).on('line', (line) => {
 child.stderr.on('data', (d) => process.stdout.write(`${c.red}${d}${c.reset}`))
 child.on('close', (code) => {
   if (resultFile && lastText) writeFileSync(resultFile, lastText)
+  if (resultFile && usage) writeFileSync(resultFile.replace(/\.txt$/, '.usage.json'), JSON.stringify(usage))
   process.exit(code ?? 1)
 })
 child.on('error', (e) => {

@@ -147,6 +147,9 @@ export interface ProjectReport {
   ideas: ProposalIdea[]
   /** PTY 출력 마지막 부분 (ANSI 제거) */
   outputTail: string
+  /** 이 실행의 Claude 비용(USD)과 턴 수. mock 실행기에서는 없다 */
+  costUsd?: number
+  turns?: number
 }
 
 export interface ApprovalCard {

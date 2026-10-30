@@ -448,6 +448,8 @@ export class HQ {
       intro: parsed.intro,
       ideas,
       outputTail: res.outputTail,
+      costUsd: res.costUsd,
+      turns: res.turns,
     }
   }
 
@@ -486,7 +488,9 @@ export class HQ {
     this.pty.resetToIdle(o.agentId)
     const exitCode = await this.pty.run(spec)
     const summary = existsSync(resultFile) ? readFileSync(resultFile, 'utf8').trim() : ''
-    return { exitCode, summary, outputTail: this.pty.getTail(o.agentId, 2000) }
+    const usageFile = resultFile.replace(/\.txt$/, '.usage.json')
+    const usage: { costUsd?: number; turns?: number } = existsSync(usageFile) ? JSON.parse(readFileSync(usageFile, 'utf8')) : {}
+    return { exitCode, summary, outputTail: this.pty.getTail(o.agentId, 2000), costUsd: usage.costUsd, turns: usage.turns }
   }
 
   /** 비대화형(-p) 실행의 도구 권한. 제안·검수 모드는 읽기 전용(Edit/Write/Bash 차단), 구현·수정(execute/fix)은 편집과 프로젝트 검사 명령을 허용한다 */

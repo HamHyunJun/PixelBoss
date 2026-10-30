@@ -58,6 +58,10 @@ const total = computed(() =>
     { files: 0, ins: 0, del: 0, proposals: 0 },
   ),
 )
+const totalCost = computed<number | undefined>(() => {
+  const costs = card.value.reports.flatMap((r) => (r.costUsd === undefined ? [] : [r.costUsd]))
+  return costs.length ? costs.reduce((a, b) => a + b, 0) : undefined
+})
 const hasError = computed(() => card.value.reports.some((r) => r.status === 'error'))
 
 const decisionOf = (key: string): string | undefined => card.value.decisions?.[key]
@@ -100,6 +104,7 @@ watch(
         <div class="stat ok"><b>+{{ total.ins }}</b><span>추가 줄</span></div>
         <div class="stat err"><b>-{{ total.del }}</b><span>삭제 줄</span></div>
         <div class="stat"><b>{{ card.skipped.length }}</b><span>생략 (토큰 0)</span></div>
+        <div v-if="totalCost !== undefined" class="stat" data-test="report-cost"><b>${{ totalCost.toFixed(2) }}</b><span>이번 실행 비용</span></div>
       </div>
 
       <p v-if="hasError" class="notice err" role="alert">일부 세션이 오류로 끝났습니다. 아래 에이전트 출력을 확인하세요.</p>
@@ -133,6 +138,7 @@ watch(
             <b class="dept">{{ deptName(it.r.department) }}</b>
             <StatusBadge :status="it.r.status" />
             <span v-if="it.r.exitCode" class="muted small">exit {{ it.r.exitCode }}</span>
+            <span v-if="it.r.costUsd !== undefined" class="muted small mono">{{ it.r.turns }}턴 · ${{ it.r.costUsd.toFixed(4) }}</span>
             <span class="grow" />
             <span v-if="it.files.length" class="mono small"><i class="ok">+{{ it.r.diffStat.insertions }}</i> <i class="err">-{{ it.r.diffStat.deletions }}</i> · {{ it.r.files.length }}개 파일</span>
           </div>
@@ -222,7 +228,7 @@ watch(
 }
 .stats {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 10px;
   margin-bottom: 14px;
 }
